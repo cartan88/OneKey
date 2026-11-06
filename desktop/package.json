@@ -1,0 +1,71 @@
+{
+  "name": "one-key",
+  "productName": "One Key",
+  "version": "1.0.0",
+  "description": "One Key — a simple, local-only password manager.",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/vault.test.js && node test/browser.test.js && node test/portability.test.js",
+    "build:host": "powershell -ExecutionPolicy Bypass -File tools/build-host.ps1",
+    "dist": "npm run build:host && electron-builder --win --x64"
+  },
+  "author": "One Key Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.onekey.app",
+    "productName": "One Key",
+    "copyright": "Copyright © 2026 One Key Team",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "build/onekey-host.exe",
+        "to": "onekey-host.exe"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": "x64"
+        },
+        {
+          "target": "portable",
+          "arch": "x64"
+        }
+      ]
+    },
+    "nsis": {
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "One Key",
+      "artifactName": "One Key Setup ${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "One Key ${version} portable.${ext}"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+
+# Compiled by tools/build-host.ps1 during 'npm run dist'.
+build/onekey-host.exe
+
+# Never commit a vault, even a test one.
+*.onekey
+*.onekey.bak

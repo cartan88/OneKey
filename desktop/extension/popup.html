@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="12" r="4" />
+          <path d="M12 12h9M17.5 12v4M21 12v3" />
+        </svg>
+      </span>
+      <div class="head__text">
+        <p class="head__name">One Key</p>
+        <p class="head__state" id="state">Connecting…</p>
+      </div>
+    </header>
+
+    <div class="body" id="body">
+      <p class="msg">Connecting to One Key…</p>
+    </div>
+
+    <footer class="foot">
+      <button class="link" id="open-app">Open One Key</button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

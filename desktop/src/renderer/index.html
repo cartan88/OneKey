@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'none'"
+    />
+    <title>One Key</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- ============================================================ SETUP -->
+    <section class="gate" id="screen-setup" hidden>
+      <div class="gate__panel">
+        <div class="brand brand--lg">
+          <span class="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="4" />
+              <path d="M12 12h9M17.5 12v4M21 12v3" />
+            </svg>
+          </span>
+          <span class="brand__name">One&nbsp;Key</span>
+        </div>
+
+        <h1 class="gate__title">Create your vault</h1>
+        <p class="gate__lede">
+          Your master password encrypts everything and is never stored. If you lose it,
+          nobody — including this app — can recover your vault.
+        </p>
+
+        <form id="form-setup" novalidate>
+          <label class="field">
+            <span class="field__label">Master password</span>
+            <span class="field__control">
+              <input id="setup-password" type="password" autocomplete="new-password" spellcheck="false" />
+              <button type="button" class="peek" data-peek="setup-password" title="Show password" aria-label="Show password"></button>
+            </span>
+          </label>
+
+          <div class="strength" id="setup-strength">
+            <div class="strength__track"><div class="strength__fill"></div></div>
+            <span class="strength__label">Use at least 12 characters</span>
+          </div>
+
+          <label class="field">
+            <span class="field__label">Confirm master password</span>
+            <span class="field__control">
+              <input id="setup-confirm" type="password" autocomplete="new-password" spellcheck="false" />
+            </span>
+          </label>
+
+          <p class="gate__error" id="setup-error" role="alert" hidden></p>
+
+          <button class="btn btn--primary btn--block" type="submit" id="setup-submit">
+            Create vault
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- =========================================================== UNLOCK -->
+    <section class="gate" id="screen-unlock" hidden>
+      <div class="gate__panel gate__panel--narrow">
+        <div class="brand brand--lg">
+          <span class="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="4" />
+              <path d="M12 12h9M17.5 12v4M21 12v3" />
+            </svg>
+          </span>
+          <span class="brand__name">One&nbsp;Key</span>
+        </div>
+
+        <h1 class="gate__title">Welcome back</h1>
+        <p class="gate__lede" id="unlock-reason">Enter your master password to unlock your vault.</p>
+
+        <form id="form-unlock" novalidate>
+          <label class="field">
+            <span class="field__label">Master password</span>
+            <span class="field__control">
+              <input id="unlock-password" type="password" autocomplete="current-password" spellcheck="false" />
+              <button type="button" class="peek" data-peek="unlock-password" title="Show password" aria-label="Show password"></button>
+            </span>
+          </label>
+
+          <p class="gate__error" id="unlock-error" role="alert" hidden></p>
+
+          <button class="btn btn--primary btn--block" type="submit" id="unlock-submit">Unlock</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============================================================== APP -->
+    <div class="app" id="screen-app" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="4" />
+              <path d="M12 12h9M17.5 12v4M21 12v3" />
+            </svg>
+          </span>
+          <span class="brand__name">One&nbsp;Key</span>
+        </div>
+
+        <nav class="nav" id="nav" aria-label="Vault sections">
+          <button class="nav__item is-active" data-view="all">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+            <span>All items</span>
+            <span class="nav__count" data-count="all">0</span>
+          </button>
+          <button class="nav__item" data-view="favorites">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 9.7l5.4-.8z"/></svg>
+            <span>Favorites</span>
+            <span class="nav__count" data-count="favorites">0</span>
+          </button>
+          <button class="nav__item" data-view="weak">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>
+            <span>Weak &amp; reused</span>
+            <span class="nav__count" data-count="weak">0</span>
+          </button>
+        </nav>
+
+        <div class="nav__heading">
+          <span>Folders</span>
+        </div>
+        <nav class="nav nav--folders" id="nav-folders" aria-label="Folders"></nav>
+
+        <div class="sidebar__foot">
+          <button class="side-btn" id="btn-generator" title="Password generator (Ctrl+G)">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h.01M16 8h.01M8 16h.01M16 16h.01M12 12h.01"/></svg>
+            <span>Password generator</span>
+          </button>
+          <button class="side-btn" id="btn-transfer">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/><path d="M8.5 7.5L12 4l3.5 3.5"/><path d="M12 4v10"/></svg>
+            <span>Import &amp; export</span>
+          </button>
+          <button class="side-btn" id="btn-settings">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+            <span>Settings</span>
+          </button>
+          <button class="side-btn" id="btn-about">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6h.01"/></svg>
+            <span>About</span>
+          </button>
+          <button class="side-btn side-btn--lock" id="btn-lock" title="Lock vault (Ctrl+L)">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+            <span>Lock vault</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="search">
+            <svg class="ico search__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+            <input id="search" type="search" placeholder="Search vault…  (Ctrl+F)" autocomplete="off" spellcheck="false" />
+            <button class="search__clear" id="search-clear" hidden aria-label="Clear search">×</button>
+          </div>
+          <button class="btn btn--primary" id="btn-add">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span>Add item</span>
+          </button>
+        </header>
+
+        <div class="content">
+          <section class="list" aria-label="Vault items">
+            <div class="list__head">
+              <input type="checkbox" class="rowcheck list__selectall" id="select-all"
+                     title="Select all" aria-label="Select all visible items" />
+              <h2 id="list-title">All items</h2>
+              <span class="list__meta" id="list-count"></span>
+            </div>
+
+            <div class="bulkbar" id="bulkbar" hidden>
+              <span class="bulkbar__count" id="bulkbar-count"></span>
+              <div class="bulkbar__move">
+                <input type="text" id="bulkbar-folder" list="folder-options"
+                       placeholder="Move to folder…" autocomplete="off" />
+                <button class="mini-btn" id="bulkbar-move-btn" type="button">Move</button>
+              </div>
+              <button class="btn btn--danger-solid btn--sm" id="bulkbar-delete-btn" type="button">Delete</button>
+              <button class="icon-btn" id="bulkbar-clear-btn" type="button" title="Clear selection" aria-label="Clear selection">×</button>
+            </div>
+
+            <div class="list__scroll" id="list" role="list"></div>
+            <div class="empty" id="list-empty" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+              <p class="empty__title">Nothing here yet</p>
+              <p class="empty__text">Add your first password to get started.</p>
+            </div>
+          </section>
+
+          <section class="detail" id="detail" aria-label="Item details">
+            <div class="detail__placeholder" id="detail-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M17.5 12v4M21 12v3"/></svg>
+              <p>Select an item to see its details.</p>
+            </div>
+            <div class="detail__body" id="detail-body" hidden></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- ========================================================== EDITOR -->
+    <div class="modal" id="modal-editor" hidden>
+      <div class="modal__backdrop" data-close="modal-editor"></div>
+      <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+        <header class="modal__head">
+          <h2 id="editor-title">Add item</h2>
+          <button class="icon-btn" data-close="modal-editor" aria-label="Close">×</button>
+        </header>
+
+        <form id="form-editor" class="modal__body" novalidate>
+          <label class="field">
+            <span class="field__label">Name <em>required</em></span>
+            <span class="field__control">
+              <input id="entry-name" type="text" placeholder="e.g. Gmail" autocomplete="off" />
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Username or email</span>
+            <span class="field__control">
+              <input id="entry-username" type="text" autocomplete="off" spellcheck="false" />
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Password</span>
+            <span class="field__control">
+              <input id="entry-password" type="password" autocomplete="new-password" spellcheck="false" />
+              <button type="button" class="peek" data-peek="entry-password" title="Show password" aria-label="Show password"></button>
+              <button type="button" class="mini-btn" id="btn-generate" title="Generate a strong password">Generate</button>
+            </span>
+          </label>
+
+          <div class="strength" id="entry-strength">
+            <div class="strength__track"><div class="strength__fill"></div></div>
+            <span class="strength__label"></span>
+          </div>
+
+          <details class="genopts" id="genopts">
+            <summary>Generator options</summary>
+            <div class="genopts__grid">
+              <label class="genopts__len">
+                <span>Length <b id="gen-length-value">20</b></span>
+                <input type="range" id="gen-length" min="8" max="64" value="20" />
+              </label>
+              <label class="check"><input type="checkbox" id="gen-upper" checked /><span>A–Z</span></label>
+              <label class="check"><input type="checkbox" id="gen-lower" checked /><span>a–z</span></label>
+              <label class="check"><input type="checkbox" id="gen-digits" checked /><span>0–9</span></label>
+              <label class="check"><input type="checkbox" id="gen-symbols" checked /><span>!@#$</span></label>
+              <label class="check"><input type="checkbox" id="gen-ambiguous" /><span>Avoid look-alikes</span></label>
+            </div>
+          </details>
+
+          <div class="field-row">
+            <label class="field">
+              <span class="field__label">Website</span>
+              <span class="field__control">
+                <input id="entry-url" type="text" placeholder="https://…" autocomplete="off" spellcheck="false" />
+              </span>
+            </label>
+            <label class="field">
+              <span class="field__label">Folder</span>
+              <span class="field__control">
+                <input id="entry-folder" type="text" list="folder-options" placeholder="Optional" autocomplete="off" />
+                <datalist id="folder-options"></datalist>
+              </span>
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field__label">Notes</span>
+            <span class="field__control">
+              <textarea id="entry-notes" rows="3" spellcheck="false"></textarea>
+            </span>
+          </label>
+
+          <label class="check check--standalone">
+            <input type="checkbox" id="entry-favorite" /><span>Add to favorites</span>
+          </label>
+
+          <p class="gate__error" id="editor-error" role="alert" hidden></p>
+        </form>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" data-close="modal-editor">Cancel</button>
+          <button class="btn btn--primary" id="editor-save" form="form-editor" type="submit">Save item</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ======================================================== SETTINGS -->
+    <div class="modal" id="modal-settings" hidden>
+      <div class="modal__backdrop" data-close="modal-settings"></div>
+      <div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header class="modal__head">
+          <h2 id="settings-title">Settings</h2>
+          <button class="icon-btn" data-close="modal-settings" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body">
+          <label class="field">
+            <span class="field__label">Auto-lock after inactivity</span>
+            <span class="field__control">
+              <select id="set-autolock">
+                <option value="1">1 minute</option>
+                <option value="5">5 minutes</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="0">Never</option>
+              </select>
+            </span>
+          </label>
+
+          <hr class="rule" />
+
+          <details class="settings-section" id="section-browser">
+            <summary>
+              <span class="settings-section__title">Browser integration</span>
+              <span class="settings-section__hint" id="browser-state-hint"></span>
+            </summary>
+            <div class="settings-section__body">
+              <label class="check check--standalone">
+                <input type="checkbox" id="set-browser" /><span>Let the One Key Chrome extension fill and save logins</span>
+              </label>
+              <p class="hint" id="browser-state">Checking…</p>
+            </div>
+          </details>
+
+          <details class="settings-section" id="section-master">
+            <summary>
+              <span class="settings-section__title">Change master password</span>
+            </summary>
+            <div class="settings-section__body">
+              <form id="form-master" novalidate>
+                <label class="field">
+                  <span class="field__label">Current master password</span>
+                  <span class="field__control">
+                    <input id="master-current" type="password" autocomplete="current-password" />
+                  </span>
+                </label>
+                <label class="field">
+                  <span class="field__label">New master password</span>
+                  <span class="field__control">
+                    <input id="master-new" type="password" autocomplete="new-password" />
+                    <button type="button" class="peek" data-peek="master-new" title="Show password" aria-label="Show password"></button>
+                  </span>
+                </label>
+                <div class="strength" id="master-strength">
+                  <div class="strength__track"><div class="strength__fill"></div></div>
+                  <span class="strength__label"></span>
+                </div>
+                <label class="field">
+                  <span class="field__label">Confirm new master password</span>
+                  <span class="field__control">
+                    <input id="master-confirm" type="password" autocomplete="new-password" />
+                  </span>
+                </label>
+                <p class="gate__error" id="master-error" role="alert" hidden></p>
+                <p class="gate__note" id="master-ok" hidden>Master password updated.</p>
+                <button class="btn btn--primary btn--block" type="submit">Update master password</button>
+              </form>
+            </div>
+          </details>
+
+          <details class="settings-section" id="section-vault">
+            <summary>
+              <span class="settings-section__title">Vault file</span>
+            </summary>
+            <div class="settings-section__body">
+              <p class="mono" id="vault-path"></p>
+              <p class="hint">
+                Everything is stored in this single AES-256-GCM encrypted file on this machine.
+                Nothing is sent anywhere. Back it up and you have backed up your vault.
+              </p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================== CONFIRM -->
+    <div class="modal" id="modal-confirm" hidden>
+      <div class="modal__backdrop" data-close="modal-confirm"></div>
+      <div class="modal__panel modal__panel--sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+        <header class="modal__head">
+          <h2 id="confirm-title">Delete item</h2>
+          <button class="icon-btn" data-close="modal-confirm" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body">
+          <div class="confirm">
+            <span class="confirm__icon" id="confirm-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>
+            </span>
+            <div>
+              <p class="confirm__message" id="confirm-message"></p>
+              <p class="confirm__detail" id="confirm-detail"></p>
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" data-close="modal-confirm">Cancel</button>
+          <button class="btn btn--danger-solid" id="confirm-ok-btn">Delete</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ======================================================== GENERATOR -->
+    <div class="modal" id="modal-generator" hidden>
+      <div class="modal__backdrop" data-close="modal-generator"></div>
+      <div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="generator-title">
+        <header class="modal__head">
+          <h2 id="generator-title">Password generator</h2>
+          <button class="icon-btn" data-close="modal-generator" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body">
+          <div class="pg__output">
+            <output class="pg__value" id="pg-value" aria-live="polite"></output>
+            <button class="icon-btn pg__again" id="pg-again" title="Generate another" aria-label="Generate another">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3.2-6.9"/><path d="M21 4v5h-5"/></svg>
+            </button>
+          </div>
+
+          <div class="strength" id="pg-strength">
+            <div class="strength__track"><div class="strength__fill"></div></div>
+            <span class="strength__label"></span>
+          </div>
+
+          <label class="genopts__len">
+            <span>Length <b id="pg-length-value">20</b></span>
+            <input type="range" id="pg-length" min="8" max="64" value="20" />
+          </label>
+
+          <div class="genopts__grid pg__grid">
+            <label class="check"><input type="checkbox" id="pg-upper" checked /><span>A–Z</span></label>
+            <label class="check"><input type="checkbox" id="pg-lower" checked /><span>a–z</span></label>
+            <label class="check"><input type="checkbox" id="pg-digits" checked /><span>0–9</span></label>
+            <label class="check"><input type="checkbox" id="pg-symbols" checked /><span>!@#$</span></label>
+            <label class="check"><input type="checkbox" id="pg-ambiguous" /><span>Avoid look-alikes</span></label>
+          </div>
+        </div>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" id="pg-new-item">Save as new item</button>
+          <button class="btn btn--primary" id="pg-copy">Copy</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- =================================================== IMPORT / EXPORT -->
+    <div class="modal" id="modal-portability" hidden>
+      <div class="modal__backdrop" data-close="modal-portability"></div>
+      <div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="portability-title">
+        <header class="modal__head">
+          <h2 id="portability-title">Import &amp; export</h2>
+          <button class="icon-btn" data-close="modal-portability" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body">
+          <div class="stack">
+            <button class="btn btn--ghost btn--block" id="btn-export-backup">
+              Export encrypted backup…
+            </button>
+            <button class="btn btn--ghost btn--block" id="btn-import">
+              Import encrypted backup…
+            </button>
+          </div>
+
+          <p class="hint">
+            Backups are encrypted under a password you choose, so they are safe to keep
+            anywhere — a spare drive, or cloud storage. One Key handles no other format:
+            it will not write your passwords in plain text, and will not read a
+            plain-text file either.
+          </p>
+          <p class="hint">
+            Importing only ever adds. Anything already in your vault is skipped, and
+            nothing is overwritten.
+          </p>
+        </div>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" data-close="modal-portability">Close</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ======================================================== TRANSFER -->
+    <div class="modal" id="modal-transfer" hidden>
+      <div class="modal__backdrop" data-close="modal-transfer"></div>
+      <div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
+        <header class="modal__head">
+          <h2 id="transfer-title">Export</h2>
+          <button class="icon-btn" data-close="modal-transfer" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body">
+          <p class="transfer__lede" id="transfer-lede"></p>
+
+          <form id="form-transfer" novalidate>
+            <label class="field" id="transfer-field-1">
+              <span class="field__label" id="transfer-label-1">Password</span>
+              <span class="field__control">
+                <input id="transfer-password" type="password" autocomplete="off" />
+                <button type="button" class="peek" data-peek="transfer-password" aria-label="Show password"></button>
+              </span>
+            </label>
+
+            <div class="strength" id="transfer-strength" hidden>
+              <div class="strength__track"><div class="strength__fill"></div></div>
+              <span class="strength__label"></span>
+            </div>
+
+            <label class="field" id="transfer-field-2">
+              <span class="field__label">Confirm password</span>
+              <span class="field__control">
+                <input id="transfer-confirm" type="password" autocomplete="off" />
+              </span>
+            </label>
+
+            <p class="gate__error" id="transfer-error" role="alert" hidden></p>
+            <p class="gate__note" id="transfer-note" hidden></p>
+          </form>
+        </div>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" data-close="modal-transfer">Cancel</button>
+          <button class="btn btn--primary" id="transfer-submit" form="form-transfer" type="submit">Continue</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- =========================================================== ABOUT -->
+    <div class="modal" id="modal-about" hidden>
+      <div class="modal__backdrop" data-close="modal-about"></div>
+      <div class="modal__panel modal__panel--sm" role="dialog" aria-modal="true" aria-labelledby="about-title">
+        <header class="modal__head">
+          <h2 id="about-title">About</h2>
+          <button class="icon-btn" data-close="modal-about" aria-label="Close">×</button>
+        </header>
+
+        <div class="modal__body about">
+          <span class="about__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="12" r="4" />
+              <path d="M12 12h9M17.5 12v4M21 12v3" />
+            </svg>
+          </span>
+
+          <h3 class="about__name" id="about-name">One Key</h3>
+          <p class="about__version" id="about-version">Version —</p>
+          <p class="about__tagline">
+            A local-only password manager. No account, no sync, no server —
+            your vault never leaves this machine.
+          </p>
+
+          <dl class="about__facts">
+            <div>
+              <dt>Created by</dt>
+              <dd id="about-creator">One Key Team</dd>
+            </div>
+            <div>
+              <dt>Platform</dt>
+              <dd id="about-platform">—</dd>
+            </div>
+            <div>
+              <dt>Electron</dt>
+              <dd id="about-electron">—</dd>
+            </div>
+            <div>
+              <dt>Chromium</dt>
+              <dd id="about-chromium">—</dd>
+            </div>
+            <div>
+              <dt>Node</dt>
+              <dd id="about-node">—</dd>
+            </div>
+          </dl>
+
+          <p class="about__copyright" id="about-copyright">© One Key Team</p>
+        </div>
+
+        <footer class="modal__foot">
+          <button class="btn btn--ghost" data-close="modal-about">Close</button>
+        </footer>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="strength.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

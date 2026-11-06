@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "One Key",
+  "version": "1.0.0",
+  "description": "Fill and save logins from your local One Key vault.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqiykvX44XVVGHYYPbpWz64bGQI2bNUUaSO06amye4/esX5vJY3LE3EpxbX4PgBxfen5qlsifEraAdfoAiEER1mXGcczF8VSkvrURT1wcUplBgrtTMTkoaWyYcgJSxBkrMPz8WimNFg11BmyTtUe6CN4GAPtILB92c+p8Sn5vWK2n36P3XOKfriodbXvDDlj34z96jPtpu7TheoQNjVao8smfsQgCpejDlWgn0vRIsmVxdCaRazBPeGci9fnaj9KXIDzOv/EhKwIskViOc6H3lUW4Z0pECBb1MeMXVRsI2h+OMUGFVMcPKJnGyZOBlm/uqm2CKXv5yc91mFJNLbeC3QIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": ["nativeMessaging", "activeTab", "scripting", "storage"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "One Key",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": false
+    }
+  ]
+}
