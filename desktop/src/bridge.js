@@ -142,7 +142,7 @@ class Bridge {
       if (!socket.destroyed) socket.write(`${JSON.stringify(payload)}\n`);
     };
 
-    socket.on('data', async (chunk) => {
+    const handleData = async (chunk) => {
       buffer += chunk;
       if (buffer.length > MAX_LINE_BYTES) {
         reply({ ok: false, code: 'TOO_LARGE' });
@@ -165,6 +165,15 @@ class Bridge {
           return;
         }
 
+        // Valid JSON is not necessarily a request: `null`, a number or an array
+        // would make every property read below throw. Anything that is not a
+        // plain object is refused before it is looked at, authenticated or not.
+        if (msg === null || typeof msg !== 'object' || Array.isArray(msg)) {
+          reply({ ok: false, code: 'BAD_JSON' });
+          socket.destroy();
+          return;
+        }
+
         // The first line must authenticate, and nothing else is served until it does.
         if (!authed) {
           if (msg.type !== 'hello' || typeof msg.token !== 'string' || !this._tokenOk(msg.token)) {
@@ -179,6 +188,16 @@ class Bridge {
 
         reply(await this._dispatch(msg));
       }
+    };
+
+    // An async listener's failure is an unhandled rejection in the main process,
+    // so nothing may escape this wrapper: the worst a bad peer gets is a closed
+    // connection.
+    socket.on('data', (chunk) => {
+      handleData(chunk).catch((err) => {
+        console.error('[one-key] bridge connection error:', err.message);
+        socket.destroy();
+      });
     });
 
     socket.on('error', () => socket.destroy());

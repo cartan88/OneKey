@@ -45,27 +45,41 @@
     return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
   }
 
-  /**
-   * Collect matches from the document and from any *open* shadow roots.
-   *
-   * Component frameworks put their inputs inside shadow roots, where a plain
-   * querySelectorAll cannot see them. Only attempted when the cheap query finds
-   * nothing, since walking every element is not free. Closed shadow roots stay
-   * out of reach — nothing can be done about those.
-   */
-  function deepQueryAll(selector) {
-    const found = [...document.querySelectorAll(selector)];
-    if (found.length) return found;
+  // The document plus every *open* shadow root, found by walking the page once
+  // and reused briefly: walking every element is not free, and one interaction
+  // asks several questions in a row (password fields, username fields, ...).
+  let rootsCache = { at: 0, roots: [document] };
 
-    const out = [];
+  function searchRoots() {
+    const now = Date.now();
+    if (now - rootsCache.at < 250) return rootsCache.roots;
+
+    const roots = [document];
     const walk = (root) => {
-      out.push(...root.querySelectorAll(selector));
       for (const el of root.querySelectorAll('*')) {
-        if (el.shadowRoot) walk(el.shadowRoot);
+        if (el.shadowRoot) {
+          roots.push(el.shadowRoot);
+          walk(el.shadowRoot);
+        }
       }
     };
     walk(document);
-    return out;
+    rootsCache = { at: now, roots };
+    return roots;
+  }
+
+  /**
+   * Collect matches from the document and from every open shadow root.
+   *
+   * Component frameworks put their inputs inside shadow roots, where a plain
+   * querySelectorAll cannot see them. They are always searched, not only when
+   * the light DOM has no match: a page almost always has some plain <input> (a
+   * search box, a hidden field), and stopping at the first match meant a login
+   * form living in a shadow root was never found. Closed shadow roots stay out
+   * of reach — nothing can be done about those.
+   */
+  function deepQueryAll(selector) {
+    return searchRoots().flatMap((root) => [...root.querySelectorAll(selector)]);
   }
 
   const passwordFields = () => deepQueryAll('input[type="password"]').filter(visible);
@@ -81,20 +95,22 @@
    * invisible on exactly the screen where it should help.
    */
   function usernameFields() {
-    return deepQueryAll('input').filter((el) => {
-      if (!visible(el)) return false;
-      if (!USERNAME_TYPES.has((el.type || '').toLowerCase())) return false;
-      if (/username|email/i.test(el.getAttribute('autocomplete') || '')) return true;
-      if ((el.type || '').toLowerCase() === 'email') return true;
-      const label = [
-        el.name,
-        el.id,
-        el.placeholder,
-        el.getAttribute('aria-label') || '',
-        el.getAttribute('data-testid') || '',
-      ].join(' ');
-      return USERNAME_HINT.test(label);
-    });
+    return deepQueryAll('input').filter((el) => visible(el) && looksLikeIdentifier(el));
+  }
+
+  /** Does this input look like it asks for an email, username or phone number? */
+  function looksLikeIdentifier(el) {
+    if (!USERNAME_TYPES.has((el.type || '').toLowerCase())) return false;
+    if (/username|email/i.test(el.getAttribute('autocomplete') || '')) return true;
+    if ((el.type || '').toLowerCase() === 'email') return true;
+    const label = [
+      el.name,
+      el.id,
+      el.placeholder,
+      el.getAttribute('aria-label') || '',
+      el.getAttribute('data-testid') || '',
+    ].join(' ');
+    return USERNAME_HINT.test(label);
   }
 
   /** Best guess at the username input that belongs to a given password input. */
@@ -742,11 +758,20 @@
 
   let lastCapture = 0;
   let lastUsername = '';
+  let lastUsernameAt = 0;
+
+  // A remembered identifier is only trusted for a short while: it is there to
+  // bridge the screens of one sign-in, not to follow the user around the page.
+  const LAST_USERNAME_TTL_MS = 10 * 60 * 1000;
 
   /**
    * Remember the last identifier the user typed. On a two-step login the email
    * field is gone by the time the password is submitted, so without this the
    * login would be saved with no username at all.
+   *
+   * Only fields that actually look like an identifier count. Taking any text
+   * box meant a search query or a chat message typed elsewhere on the page
+   * could end up saved as the login's username.
    *
    * Uses `change` rather than `input`: it fires once on leaving the field, so
    * this costs nothing per keystroke.
@@ -756,13 +781,37 @@
     (event) => {
       const el = event.target;
       if (!(el instanceof HTMLInputElement)) return;
-      if ((el.type || '').toLowerCase() === 'password') return;
-      if (!USERNAME_TYPES.has((el.type || '').toLowerCase())) return;
+      if (!looksLikeIdentifier(el)) return;
       const value = (el.value || '').trim();
-      if (value.length > 2) lastUsername = value;
+      if (value.length > 2) {
+        lastUsername = value;
+        lastUsernameAt = Date.now();
+      }
     },
     true
   );
+
+  function rememberedUsername() {
+    return Date.now() - lastUsernameAt < LAST_USERNAME_TTL_MS ? lastUsername : '';
+  }
+
+  /**
+   * Is this click on something that submits a login? A real submit control, or a
+   * button worded like one. Show-password eyes, "forgot password" links and the
+   * like are not, and treating them as a submit offered to save a half-typed
+   * password.
+   */
+  const NOT_A_SUBMIT = /show|hide|reveal|toggle|visib|eye|forgot|reset|cancel|back/i;
+  const SUBMIT_WORDING = /log\s?in|sign\s?in|sign\s?up|submit|continue|next|enter|register|create|join|verify/i;
+
+  function isSubmitLike(el) {
+    const label = [el.textContent, el.value, el.getAttribute('aria-label'), el.getAttribute('title')]
+      .filter(Boolean)
+      .join(' ');
+    if (NOT_A_SUBMIT.test(label)) return false;
+    if (el.type === 'submit') return true;
+    return SUBMIT_WORDING.test(label);
+  }
 
   async function capture(reason) {
     const pw = passwordFields().find((el) => el.value);
@@ -773,7 +822,7 @@
     const user = usernameFor(pw);
     const payload = {
       url: location.href,
-      username: (user && user.value) || lastUsername || '',
+      username: (user && user.value) || rememberedUsername(),
       password: pw.value,
     };
 
@@ -805,17 +854,25 @@
     'click',
     (event) => {
       const el = event.target instanceof Element ? event.target.closest('button, input[type="submit"], [role="button"]') : null;
-      if (!el) return;
-      if (el.type === 'button' && !/log|sign|submit|continue|next|enter/i.test(el.textContent || el.value || '')) return;
+      if (!el || !isSubmitLike(el)) return;
       capture('click');
     },
     true
   );
 
+  // Enter submits the login only from a field that belongs to it. Pressing Enter
+  // in an unrelated box (a search field, say) while a password sits typed
+  // elsewhere on the page is not a sign-in.
   document.addEventListener(
     'keydown',
     (event) => {
-      if (event.key === 'Enter' && event.target instanceof HTMLInputElement) capture('enter');
+      const el = event.target;
+      if (event.key !== 'Enter' || !(el instanceof HTMLInputElement)) return;
+
+      const pw = passwordFields().find((field) => field.value);
+      if (!pw) return;
+      const sameForm = el.form && el.form === pw.form;
+      if (el === pw || sameForm || usernameFields().includes(el)) capture('enter');
     },
     true
   );

@@ -298,16 +298,33 @@ class VaultRepository(baseDir: File) {
         }
     }
 
-    /** The vault file, or the previous good copy if the main file is unreadable. */
-    private fun readEnvelope(): JSONObject = try {
-        JSONObject(file.readText(Charsets.UTF_8))
-    } catch (e: Exception) {
-        if (!backupFile.exists()) throw corrupt("the vault file is unreadable")
-        try {
-            JSONObject(backupFile.readText(Charsets.UTF_8))
-        } catch (e2: Exception) {
-            throw corrupt("the vault file and its backup copy are both unreadable")
+    /**
+     * The vault file, or the previous good copy if the main file is unusable.
+     *
+     * "Usable" includes a structural check, so everything that follows (reading
+     * the salt, deriving a key) only ever sees an envelope that has been
+     * validated, including the cap on how much memory scrypt may be asked for.
+     */
+    private fun readEnvelope(): JSONObject {
+        val main = loadEnvelope(file)
+        if (main.envelope != null) return main.envelope
+        if (!backupFile.exists()) throw corrupt(main.problem)
+
+        val spare = loadEnvelope(backupFile)
+        if (spare.envelope != null) return spare.envelope
+        throw corrupt("the vault file and its backup copy are both unusable")
+    }
+
+    private class Loaded(val envelope: JSONObject?, val problem: String)
+
+    private fun loadEnvelope(source: File): Loaded {
+        val envelope = try {
+            JSONObject(source.readText(Charsets.UTF_8))
+        } catch (e: Exception) {
+            return Loaded(null, "the vault file is unreadable")
         }
+        val problem = OneKeyCrypto.envelopeProblem(envelope)
+        return if (problem == null) Loaded(envelope, "") else Loaded(null, problem)
     }
 
     /** Writes the new entry list to disk and, only once that succeeds, adopts it in memory. */

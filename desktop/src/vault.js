@@ -20,6 +20,7 @@ const {
   encryptPayload,
   decryptPayload,
   kdfFromEnvelope,
+  assertEnvelopeUsable,
   wipe,
 } = require('./crypto');
 // Lives under renderer/ because the same file is loaded by the UI for its live
@@ -53,10 +54,15 @@ class Vault {
     // Every write chains onto this so concurrent callers (the renderer and the
     // Chrome-extension bridge) never race on the same file. See _persist().
     this._writeQueue = Promise.resolve();
+
+    // lock() takes effect for callers at once but only releases the key after
+    // writes already queued have been saved. See lock().
+    this._locking = false;
+    this._lockDone = Promise.resolve();
   }
 
   get isUnlocked() {
-    return this._key !== null;
+    return this._key !== null && !this._locking;
   }
 
   exists() {
@@ -66,6 +72,7 @@ class Vault {
   // ---------------------------------------------------------------- lifecycle
 
   async create(masterPassword) {
+    await this._lockDone;
     if (this.exists()) {
       throw new VaultError('EXISTS', 'A vault already exists on this machine.');
     }
@@ -92,6 +99,7 @@ class Vault {
   }
 
   async unlock(masterPassword) {
+    await this._lockDone;
     if (!this.exists()) {
       throw new VaultError('NO_VAULT', 'No vault found. Create one first.');
     }
@@ -109,17 +117,41 @@ class Vault {
       throw new VaultError('BAD_PASSWORD', 'Incorrect master password.');
     }
 
+    // Unlocking over an already-unlocked session must not strand the old key.
+    wipe(this._key);
     this._key = key;
     this._salt = salt;
     this._kdf = params;
     this._payload = this._normalize(payload);
   }
 
+  /**
+   * Lock the vault.
+   *
+   * Callers see it as locked immediately (isUnlocked is false, every entry
+   * method refuses), but the key and entries are only released once the writes
+   * already in the queue have been saved. Dropping the key straight away made
+   * those writes fail with LOCKED, so an edit acknowledged just before an
+   * auto-lock or Quit never reached disk. The returned promise settles when the
+   * key is gone; unlock() and create() wait for it.
+   */
   lock() {
-    wipe(this._key);
-    this._key = null;
-    this._payload = null;
-    this._salt = null;
+    if (this._key === null) return this._lockDone;
+
+    this._locking = true;
+    const key = this._key;
+    this._lockDone = this._writeQueue
+      .catch(() => {})
+      .then(() => {
+        wipe(key);
+        if (this._key === key) {
+          this._key = null;
+          this._payload = null;
+          this._salt = null;
+        }
+        this._locking = false;
+      });
+    return this._lockDone;
   }
 
   async changeMasterPassword(currentPassword, newPassword) {
@@ -150,13 +182,18 @@ class Vault {
     }
     if (!ok) throw new VaultError('BAD_PASSWORD', 'Current master password is incorrect.');
 
-    const oldKey = this._key;
-    this._salt = newSalt();
-    this._kdf = KDF;
-    this._key = await deriveKey(newPassword, this._salt, this._kdf);
-    wipe(oldKey);
-
-    await this._persist();
+    // The new credentials are written to disk first and only adopted by this
+    // session once that write has succeeded (inside the same queue slot, so no
+    // other save can sneak in under the old key in between). A failed write
+    // therefore leaves both the file and the session on the old password.
+    const salt = newSalt();
+    const key = await deriveKey(newPassword, salt, KDF);
+    try {
+      await this._persist({ key, salt, kdf: KDF });
+    } catch (err) {
+      wipe(key);
+      throw err;
+    }
   }
 
   // ------------------------------------------------------------------ entries
@@ -487,9 +524,10 @@ class Vault {
     } catch {
       throw new VaultError('CORRUPT', 'The vault file is not valid — it may be corrupted.');
     }
-    if (envelope.format !== 'onekey-vault' || !envelope.kdf || !envelope.data) {
+    if (!envelope || envelope.format !== 'onekey-vault' || !envelope.kdf || !envelope.data) {
       throw new VaultError('CORRUPT', 'The vault file is not a One Key vault.');
     }
+    assertEnvelopeUsable(envelope);
     return envelope;
   }
 
@@ -515,9 +553,9 @@ class Vault {
    * rejection itself is still delivered to the caller that triggered it, via
    * the returned promise.
    */
-  _persist() {
+  _persist(newCredentials = null) {
     const previous = this._writeQueue;
-    const run = previous.catch(() => {}).then(() => this._persistNow());
+    const run = previous.catch(() => {}).then(() => this._persistNow(newCredentials));
     this._writeQueue = run.catch(() => {});
     return run;
   }
@@ -527,9 +565,11 @@ class Vault {
    * previous good file -> rename into place. A crash mid-write can therefore
    * never leave a half-written vault.
    */
-  async _persistNow() {
-    this._assertUnlocked();
-    const envelope = encryptPayload(this._payload, this._key, this._salt, this._kdf);
+  async _persistNow(newCredentials = null) {
+    // Not _assertUnlocked(): a lock in progress must still let queued writes finish.
+    if (this._key === null) throw new VaultError('LOCKED', 'The vault is locked.');
+    const creds = newCredentials || { key: this._key, salt: this._salt, kdf: this._kdf };
+    const envelope = encryptPayload(this._payload, creds.key, creds.salt, creds.kdf);
     const json = JSON.stringify(envelope, null, 2);
     const tmp = `${this.file}.tmp`;
 
@@ -545,6 +585,13 @@ class Vault {
       await fsp.copyFile(this.file, this.backupFile);
     }
     await fsp.rename(tmp, this.file);
+
+    if (newCredentials) {
+      wipe(this._key);
+      this._key = newCredentials.key;
+      this._salt = newCredentials.salt;
+      this._kdf = newCredentials.kdf;
+    }
   }
 
   // ------------------------------------------------------------------ helpers

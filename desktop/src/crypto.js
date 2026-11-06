@@ -19,6 +19,7 @@
  */
 
 const crypto = require('crypto');
+const { AppError } = require('./errors');
 
 // scrypt parameters. N=2^17 with r=8 needs ~128 MiB of scratch memory, which is
 // a deliberate brute-force cost. maxmem must be raised past Node's 32 MiB default.
@@ -101,6 +102,56 @@ function decryptPayload(envelope, key) {
   const text = plaintext.toString('utf8');
   plaintext.fill(0);
   return JSON.parse(text);
+}
+
+// 2^21 caps scrypt scratch memory at 128 * 2^21 = 256 MiB. The default
+// (N=2^17, r=8) is 2^20, i.e. 128 MiB.
+const MAX_N_TIMES_R = 2 ** 21;
+
+function decodedLength(value) {
+  if (typeof value !== 'string') return -1;
+  try {
+    return Buffer.from(value, 'base64').length;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * What is structurally wrong with an envelope, or null if it is usable.
+ *
+ * Checked before any key derivation so a damaged or hand-edited file is
+ * reported as damaged rather than blamed on the password, and so a hostile
+ * file cannot choose how much memory scrypt is allowed to use: scryptMaxmem()
+ * raises Node's limit to whatever the parameters ask for, which makes the
+ * parameters themselves the thing that has to be bounded.
+ */
+function envelopeProblem(envelope) {
+  const k = envelope && envelope.kdf;
+  if (!k || typeof k !== 'object') return 'its key-derivation settings are missing';
+  if ((k.name || KDF.name) !== 'scrypt') return 'it uses an unsupported key derivation';
+
+  const { N, r, p } = k;
+  if (!Number.isInteger(N) || N < 2 || (N & (N - 1)) !== 0) return 'its key-derivation settings are invalid';
+  if (!Number.isInteger(r) || r < 1 || !Number.isInteger(p) || p < 1 || p > 16) {
+    return 'its key-derivation settings are invalid';
+  }
+  if (N * r > MAX_N_TIMES_R) return 'its key-derivation settings are too demanding for this computer';
+  if ((k.keylen || KDF.keylen) !== KDF.keylen) return 'its key-derivation settings are invalid';
+
+  if (decodedLength(k.salt) <= 0) return 'its salt is missing or unreadable';
+  if (decodedLength(envelope.iv) !== IV_BYTES) return 'its nonce is missing or unreadable';
+  if (decodedLength(envelope.tag) !== 16) return 'its authentication tag is missing or unreadable';
+  if (decodedLength(envelope.data) < 0) return 'its encrypted contents are missing or unreadable';
+  return null;
+}
+
+/** Throws a user-facing CORRUPT error if the envelope cannot safely be opened. */
+function assertEnvelopeUsable(envelope) {
+  const problem = envelopeProblem(envelope);
+  if (problem) {
+    throw new AppError('CORRUPT', `That file looks damaged or incomplete: ${problem}.`);
+  }
 }
 
 /** Read the KDF parameters an existing vault was written with. */
@@ -193,6 +244,8 @@ module.exports = {
   encryptPayload,
   decryptPayload,
   kdfFromEnvelope,
+  envelopeProblem,
+  assertEnvelopeUsable,
   generatePassword,
   wipe,
 };

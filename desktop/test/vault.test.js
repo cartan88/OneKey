@@ -235,6 +235,64 @@ const log = (...a) => console.log('  ok', ...a);
   );
   log('25 concurrent addEntry calls all persisted — no write-race data loss');
 
+  // ----------------------------------------------- saves survive a lock or quit
+  //
+  // lock() used to drop the key at once, so a write still in the queue failed
+  // with LOCKED and the edit the UI had just acknowledged never reached disk.
+  const inFlight = v.addEntry({ name: 'Saved during lock', username: 'u', password: 'p-lock' });
+  const locking = v.lock();
+  assert.strictEqual(v.isUnlocked, false, 'callers must see the vault as locked immediately');
+  assert.throws(() => v.listEntries(), (e) => e.code === 'LOCKED');
+  await inFlight;
+  await locking;
+  await v.unlock('brand new master pw');
+  assert.ok(
+    v.listEntries().some((e) => e.name === 'Saved during lock'),
+    'a save queued before lock() must still reach disk'
+  );
+  log('a save queued just before lock() is not lost');
+
+  // ------------------------------------------ master password change is atomic
+  const staged = path.join(dir, 'vault.onekey.tmp');
+  fs.mkdirSync(staged); // a directory in the way makes the next write fail
+  await assert.rejects(() => v.changeMasterPassword('brand new master pw', 'a different master pw'));
+  fs.rmdirSync(staged);
+
+  await v.addEntry({ name: 'After failed change', username: 'u', password: 'p-after' });
+  v.lock();
+  await assert.rejects(() => v.unlock('a different master pw'), (e) => e.code === 'BAD_PASSWORD');
+  await v.unlock('brand new master pw');
+  assert.ok(
+    v.listEntries().some((e) => e.name === 'After failed change'),
+    'after a failed change, saves must still be written under the unchanged password'
+  );
+  log('a failed master-password change leaves file and session on the old password');
+
+  await v.changeMasterPassword('brand new master pw', 'a different master pw');
+  await v.addEntry({ name: 'Under new password', username: 'u', password: 'p-new' });
+  v.lock();
+  await assert.rejects(() => v.unlock('brand new master pw'), (e) => e.code === 'BAD_PASSWORD');
+  await v.unlock('a different master pw');
+  assert.ok(v.listEntries().some((e) => e.name === 'Under new password'));
+  log('a successful change takes effect for later saves and survives a relock');
+
+  // ------------------------------------------- damaged or hostile vault files
+  const original = fs.readFileSync(v.file, 'utf8');
+  v.lock();
+  const hostile = JSON.parse(original);
+  hostile.kdf.N = 2 ** 30;
+  fs.writeFileSync(v.file, JSON.stringify(hostile));
+  await assert.rejects(() => v.unlock('a different master pw'), (e) => e.code === 'CORRUPT');
+
+  const noSalt = JSON.parse(original);
+  delete noSalt.kdf.salt;
+  fs.writeFileSync(v.file, JSON.stringify(noSalt));
+  await assert.rejects(() => v.unlock('a different master pw'), (e) => e.code === 'CORRUPT');
+
+  fs.writeFileSync(v.file, original);
+  await v.unlock('a different master pw');
+  log('a vault asking for absurd scrypt memory, or missing its salt, is refused as damaged');
+
   console.log('\nAll tests passed.');
   fs.rmSync(dir, { recursive: true, force: true });
 })().catch((err) => {

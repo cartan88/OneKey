@@ -2,16 +2,13 @@
 
 package com.onekey.app
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.PersistableBundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,15 +37,38 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+    private val vm: OneKeyViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Keeps saved logins out of screenshots, screen recordings and the
+        // recent-apps thumbnail.
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    OneKeyApp()
+                    OneKeyApp(vm)
                 }
             }
         }
+    }
+
+    // These feed the auto-lock: see AutoLockPolicy.
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        vm.noteInteraction()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        vm.onBackgrounded()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        vm.onForegrounded()
     }
 }
 
@@ -61,6 +81,7 @@ fun OneKeyApp(vm: OneKeyViewModel = viewModel()) {
     var showImportPasswordDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForCreateDocument { uri ->
+        vm.pickerClosed()
         val bytes = state.lastExport
         if (uri == null || bytes == null) {
             // Picker dismissed: nothing was saved, and the pending bytes must not linger.
@@ -73,6 +94,7 @@ fun OneKeyApp(vm: OneKeyViewModel = viewModel()) {
         }
     }
     val importLauncher = rememberLauncherForOpenDocument { uri ->
+        vm.pickerClosed()
         if (uri != null) {
             val name = queryDisplayName(context, uri) ?: "backup.onekey"
             val bytes = runCatching {
@@ -92,6 +114,7 @@ fun OneKeyApp(vm: OneKeyViewModel = viewModel()) {
     LaunchedEffect(state.lastExport) {
         if (state.lastExport != null) {
             val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            vm.pickerOpened()
             exportLauncher("one-key-backup-$stamp.onekey")
         }
     }
@@ -105,7 +128,10 @@ fun OneKeyApp(vm: OneKeyViewModel = viewModel()) {
                 entries = state.entries,
                 busy = state.busy,
                 onExport = { showExportDialog = true },
-                onImport = { importLauncher(arrayOf("*/*")) },
+                onImport = {
+                    vm.pickerOpened()
+                    importLauncher(arrayOf("*/*"))
+                },
             )
             Screen.EDITOR -> EntryEditorScreen(vm, vm.entryById(state.editingEntryId), state.busy)
         }
@@ -291,7 +317,7 @@ private fun EntryRow(entry: Entry, busy: Boolean, onClick: () -> Unit, onDelete:
                 Text(entry.username, style = MaterialTheme.typography.bodySmall)
             }
         }
-        IconButton(onClick = { copyToClipboard(context, "Password", entry.password) }) {
+        IconButton(onClick = { ClipboardGuard.copySecret(context, entry.password) }) {
             Icon(Icons.Filled.ContentCopy, contentDescription = "Copy password")
         }
         IconButton(enabled = !busy, onClick = onDelete) {
@@ -435,17 +461,6 @@ private fun LabeledField(
 @Composable
 private fun HelperText(text: String) {
     Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-}
-
-private fun copyToClipboard(context: android.content.Context, label: String, value: String) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java)
-    val clip = ClipData.newPlainText(label, value)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        clip.description.extras = PersistableBundle().apply {
-            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-        }
-    }
-    clipboard.setPrimaryClip(clip)
 }
 
 private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {

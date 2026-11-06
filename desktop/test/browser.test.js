@@ -44,6 +44,15 @@ const log = (...a) => console.log('  ok', ...a);
   assert.strictEqual(nameFromUrl('https://github.com'), 'Github');
   log('nameFromUrl derives a sensible entry name');
 
+  // A login saved for an https site must never be offered on its plain-http twin.
+  assert.ok(!entryMatchesUrl('https://bank.test', 'http://bank.test/login'));
+  assert.ok(!entryMatchesUrl('bank.test', 'http://bank.test'), 'no scheme means https');
+  assert.ok(entryMatchesUrl('https://bank.test', 'https://bank.test/login'));
+  assert.ok(entryMatchesUrl('http://legacy.test', 'http://legacy.test'));
+  assert.ok(entryMatchesUrl('http://legacy.test', 'https://legacy.test'), 'upgrading to https is fine');
+  assert.ok(entryMatchesUrl('localhost', 'http://localhost:3000/'), 'loopback dev servers are exempt');
+  log('an https entry is never matched to the http version of the same site');
+
   // --------------------------------------------------------------------- vault
 
   const v = new Vault(dir);
@@ -75,6 +84,14 @@ const log = (...a) => console.log('  ok', ...a);
   assert.deepStrictEqual(v.matchEntriesForUrl('https://example.org'), []);
   assert.deepStrictEqual(v.matchEntriesForUrl('javascript:void 0'), []);
   log('subdomains match, unrelated and non-http pages do not');
+
+  assert.deepStrictEqual(v.matchEntriesForUrl('http://github.com/login'), []);
+  assert.throws(
+    () => v.credentialFor(gh.id, 'http://github.com/'),
+    (e) => e.code === 'ORIGIN_MISMATCH',
+    'the credential must not be handed to a plain-http page'
+  );
+  log('matching and credentialFor refuse a plain-http page for an https entry');
 
   const cred = v.credentialFor(gh.id, 'https://github.com/session');
   assert.strictEqual(cred.password, 'gh-secret-1');
@@ -160,6 +177,9 @@ const log = (...a) => console.log('  ok', ...a);
     onActivity: (kind, detail) => activity.push({ kind, ...detail }),
   });
 
+  const unhandled = [];
+  process.on('unhandledRejection', (err) => unhandled.push(err));
+
   await bridge.start();
   assert.ok(bridge.isRunning);
 
@@ -226,6 +246,28 @@ const log = (...a) => console.log('  ok', ...a);
     await c.closed;
     log('bridge refuses requests sent before the handshake');
   }
+
+  // Valid JSON that is not a request object must be refused cleanly, before and
+  // after authenticating, without taking the bridge down.
+  for (const junk of [null, 5, 'text', [1, 2]]) {
+    const c = client();
+    await c.ready;
+    c.send(junk);
+    assert.strictEqual((await c.next()).code, 'BAD_JSON');
+    await c.closed;
+  }
+  {
+    const c = client();
+    await c.ready;
+    c.send({ type: 'hello', token, rid: 0 });
+    assert.strictEqual((await c.next()).code, 'HELLO');
+    c.send(null);
+    assert.strictEqual((await c.next()).code, 'BAD_JSON');
+    await c.closed;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepStrictEqual(unhandled, [], 'a malformed line must not cause an unhandled rejection');
+  log('bridge answers a non-object JSON line with BAD_JSON and keeps running');
 
   // The real conversation.
   {

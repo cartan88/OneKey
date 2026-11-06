@@ -187,6 +187,61 @@ class VaultSafetyTest {
         assertEquals(setOf("Example Bank", "Sample Mail"), dest.listEntries().map { it.name }.toSet())
     }
 
+    // ----------------------------------- the local vault file is validated first
+
+    private fun rewriteVaultFile(dir: File, change: (JSONObject) -> Unit) {
+        val file = File(dir, "vault.onekey")
+        val envelope = JSONObject(file.readText())
+        change(envelope)
+        file.writeText(envelope.toString())
+    }
+
+    @Test
+    fun `a vault file with no key-derivation settings is reported as damaged, not as a crash`() {
+        val dir = tmp.newFolder()
+        val repo = vaultWith(dir)
+        repo.lock()
+        rewriteVaultFile(dir) { it.remove("kdf") }
+
+        val err = assertThrows(VaultException::class.java) { repo.unlock("master password") }
+        assertEquals("CORRUPT", err.code)
+    }
+
+    @Test
+    fun `a vault file demanding absurd scrypt memory is refused before any derivation`() {
+        val dir = tmp.newFolder()
+        val repo = vaultWith(dir)
+        repo.lock()
+        rewriteVaultFile(dir) { it.getJSONObject("kdf").put("N", 1 shl 30) }
+
+        val started = System.nanoTime()
+        val err = assertThrows(VaultException::class.java) { repo.unlock("master password") }
+        assertEquals("CORRUPT", err.code)
+        assertTrue("must be refused without running the derivation", System.nanoTime() - started < 2_000_000_000L)
+    }
+
+    @Test
+    fun `changing the master password also refuses a damaged vault file up front`() {
+        val dir = tmp.newFolder()
+        val repo = vaultWith(dir)
+        rewriteVaultFile(dir) { it.getJSONObject("kdf").remove("salt") }
+
+        val err = assertThrows(VaultException::class.java) { repo.changeMasterPassword("master password", "second password") }
+        assertEquals("CORRUPT", err.code)
+    }
+
+    @Test
+    fun `a structurally damaged vault file falls back to the spare copy`() {
+        val dir = tmp.newFolder()
+        val repo = vaultWith(dir, "A")
+        repo.addEntry("B", "u", "p", "https://b.test", "", "") // the spare now holds the A-only state
+        repo.lock()
+        rewriteVaultFile(dir) { it.remove("iv") }
+
+        repo.unlock("master password")
+        assertEquals(listOf("A"), repo.listEntries().map { it.name })
+    }
+
     @Test
     fun `the password rule is shared`() {
         assertFalse(PasswordPolicy.isAcceptable("1234567"))

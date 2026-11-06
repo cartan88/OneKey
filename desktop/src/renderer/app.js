@@ -130,6 +130,7 @@ api.onLocked(({ reason }) => {
   state.entries = [];
   state.selectedId = null;
   state.revealedId = null;
+  state.revealedValue = '';
   state.bulkSelected.clear();
   state.search = '';
   $('search').value = '';
@@ -863,9 +864,6 @@ $('bulkbar-move-btn').addEventListener('click', async () => {
 // ----------------------------------------------------------------- editor modal
 
 async function openEditor(id = null) {
-  state.editingId = id;
-  hideError($('editor-error'));
-
   const nameEl = $('entry-name');
   const userEl = $('entry-username');
   const passEl = $('entry-password');
@@ -878,6 +876,15 @@ async function openEditor(id = null) {
     const entry = state.entries.find((e) => e.id === id);
     if (!entry) return;
 
+    // The stored password has to be loaded before the dialog opens, and the
+    // dialog must not open without it: saving sends whatever is in the password
+    // box, and an empty box means "clear the password". Opening on a failed
+    // load would turn a fixed typo in the notes into a wiped password.
+    const res = await api.entries.reveal(id);
+    if (!res.ok) return toast(res.error.message, 'bad');
+
+    state.editingId = id;
+    hideError($('editor-error'));
     $('editor-title').textContent = 'Edit item';
     $('editor-save').textContent = 'Save changes';
     nameEl.value = entry.name;
@@ -886,10 +893,10 @@ async function openEditor(id = null) {
     folderEl.value = entry.folder;
     notesEl.value = entry.notes;
     favEl.checked = entry.favorite;
-
-    const res = await api.entries.reveal(id);
-    passEl.value = res.ok ? res.value : '';
+    passEl.value = res.value;
   } else {
+    state.editingId = id;
+    hideError($('editor-error'));
     $('editor-title').textContent = 'Add item';
     $('editor-save').textContent = 'Save item';
     nameEl.value = '';

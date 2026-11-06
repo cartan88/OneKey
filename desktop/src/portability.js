@@ -17,8 +17,16 @@
  * the crypto and merge rules directly testable.
  */
 
-const { encryptPayload, decryptPayload, deriveKey, newSalt, kdfFromEnvelope, wipe, KDF } =
-  require('./crypto');
+const {
+  encryptPayload,
+  decryptPayload,
+  deriveKey,
+  newSalt,
+  kdfFromEnvelope,
+  assertEnvelopeUsable,
+  wipe,
+  KDF,
+} = require('./crypto');
 const { hostOf } = require('./match');
 const { AppError } = require('./errors');
 
@@ -55,6 +63,7 @@ async function readBackup(envelope, password) {
   if (!envelope || envelope.format !== BACKUP_FORMAT || !envelope.kdf || !envelope.data) {
     throw new AppError('NOT_BACKUP', 'That file is not a One Key backup.');
   }
+  assertEnvelopeUsable(envelope);
 
   const key = await deriveKey(
     password,

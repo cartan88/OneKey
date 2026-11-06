@@ -327,6 +327,11 @@ multi-label suffixes — an entry for `foo.github.io` will be offered on
 `bar.github.io`. The result is one extra item in a list you choose from, never a
 silent fill.
 
+The scheme matters too: a login saved for an https site (or with no scheme, which
+counts as https) is never offered on the plain-`http://` version of that site,
+since anyone on the network can serve that page. `localhost` development servers
+are exempt.
+
 ## How it's secured
 
 | | |

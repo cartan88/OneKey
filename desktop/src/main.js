@@ -26,7 +26,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 
 const { Vault, VaultError } = require('./vault');
-const { generatePassword } = require('./crypto');
+const { generatePassword, assertEnvelopeUsable } = require('./crypto');
 const { Bridge } = require('./bridge');
 const { BACKUP_FORMAT, makeBackup, readBackup } = require('./portability');
 const { AppError } = require('./errors');
@@ -237,6 +237,8 @@ function openExternal(rawUrl) {
 
 function lockAndNotify(reason) {
   if (!vault.isUnlocked) return;
+  // Locked for every caller at once; the key itself is released once any save
+  // already queued has reached disk (see Vault.lock).
   vault.lock();
   // Tear the pipe down before anything else: a locked vault must not be
   // reachable from the browser even for a moment.
@@ -480,6 +482,9 @@ handle('vault:inspectImport', async () => {
     );
   }
 
+  // Refuse a damaged or hostile file here, before a password is even asked for.
+  assertEnvelopeUsable(envelope);
+
   pendingImport = { kind: 'backup', filePath, envelope };
   return { chosen: true, path: filePath };
 });
@@ -584,12 +589,24 @@ app.on('window-all-closed', () => {
   if (isQuitting) app.quit();
 });
 
-app.on('before-quit', () => {
+// Quitting waits for the vault to finish saving: a write that was acknowledged
+// to the UI or the extension a moment ago may still be queued, and exiting now
+// would throw it away.
+let quitFlushed = false;
+app.on('before-quit', (event) => {
   isQuitting = true;
-  vault.lock();
+  if (quitFlushed) return;
+
+  event.preventDefault();
+  quitFlushed = true;
   bridge.stop().catch(() => {});
-  clearClipboardNow();
-  if (tray && !tray.isDestroyed()) tray.destroy();
+  Promise.resolve(vault.lock())
+    .catch(() => {})
+    .then(() => {
+      clearClipboardNow();
+      if (tray && !tray.isDestroyed()) tray.destroy();
+      app.quit();
+    });
 });
 
 // Belt and braces: refuse any renderer attempt to attach a webview or navigate out.

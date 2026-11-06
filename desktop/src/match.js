@@ -39,9 +39,35 @@ function hostsMatch(a, b) {
   return suffixOf(a, b) || suffixOf(b, a);
 }
 
-/** True if `entryUrl` should be offered on the page at `pageUrl`. */
+/**
+ * The scheme an entry was saved for. An entry written without one ("github.com")
+ * is treated as https, which is what hostOf() already assumes when it parses it.
+ */
+function schemeOf(rawUrl) {
+  const found = /^([a-z][a-z0-9+.-]*):[/][/]/i.exec(String(rawUrl || '').trim());
+  return found ? found[1].toLowerCase() : 'https';
+}
+
+/** localhost and loopback addresses, which browsers also treat as trustworthy over http. */
+function isLoopbackHost(host) {
+  return host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '[::1]';
+}
+
+/**
+ * True if `entryUrl` should be offered on the page at `pageUrl`.
+ *
+ * Hosts must match, and a login saved for an https site is never offered on the
+ * plain-http version of it: anyone on the network can serve that page, so
+ * filling there would hand them the password. An entry saved for http, or any
+ * entry on a loopback development server, is unaffected.
+ */
 function entryMatchesUrl(entryUrl, pageUrl) {
-  return hostsMatch(hostOf(entryUrl), hostOf(pageUrl));
+  const pageHost = hostOf(pageUrl);
+  if (!hostsMatch(hostOf(entryUrl), pageHost)) return false;
+
+  const pageIsPlainHttp = schemeOf(pageUrl) === 'http';
+  if (pageIsPlainHttp && schemeOf(entryUrl) === 'https' && !isLoopbackHost(pageHost)) return false;
+  return true;
 }
 
 /** A sensible entry name for a login captured from the browser. */

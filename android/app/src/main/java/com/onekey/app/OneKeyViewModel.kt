@@ -1,12 +1,14 @@
 package com.onekey.app
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.app.data.Entry
 import com.onekey.app.data.VaultException
 import com.onekey.app.data.VaultRepository
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,17 +79,79 @@ class OneKeyViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(screen = Screen.LIST, entries = repo.listEntries(), error = null) }
     }
 
-    fun lock() = submit {
-        repo.lock()
-        _state.update {
-            it.copy(
-                screen = Screen.UNLOCK,
-                entries = emptyList(),
-                editingEntryId = null,
-                lastExport = null,
-                pendingImport = null,
-            )
+    /**
+     * What the user sees goes away at once; the key itself is released on the
+     * worker, after any operation already underway has finished.
+     */
+    fun lock() {
+        hideVaultContents()
+        ClipboardGuard.clearNow(getApplication())
+        submit {
+            repo.lock()
+            hideVaultContents()
         }
+    }
+
+    private fun hideVaultContents() = _state.update {
+        it.copy(
+            screen = Screen.UNLOCK,
+            entries = emptyList(),
+            editingEntryId = null,
+            lastExport = null,
+            pendingImport = null,
+        )
+    }
+
+    // ------------------------------------------------------------ auto-lock
+
+    private val autoLock = AutoLockPolicy()
+    private var lastInteractionAt = SystemClock.elapsedRealtime()
+    private var backgroundedAt: Long? = null
+    private var pickerOpen = false
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                delay(5_000)
+                lockIfDue()
+            }
+        }
+    }
+
+    private fun isShowingVault() = _state.value.screen.let { it == Screen.LIST || it == Screen.EDITOR }
+
+    private fun lockIfDue() {
+        if (isShowingVault() &&
+            autoLock.shouldLock(SystemClock.elapsedRealtime(), lastInteractionAt, backgroundedAt, pickerOpen)
+        ) {
+            lock()
+        }
+    }
+
+    /** A touch or key press anywhere in the app. */
+    fun noteInteraction() {
+        lastInteractionAt = SystemClock.elapsedRealtime()
+    }
+
+    fun onBackgrounded() {
+        backgroundedAt = SystemClock.elapsedRealtime()
+    }
+
+    /** Checked first thing on return, because timers do not tick while the app is frozen in the background. */
+    fun onForegrounded() {
+        lockIfDue()
+        backgroundedAt = null
+        lastInteractionAt = SystemClock.elapsedRealtime()
+    }
+
+    /** A system file picker is open over the app, so leaving it is not the user walking away. */
+    fun pickerOpened() {
+        pickerOpen = true
+    }
+
+    fun pickerClosed() {
+        pickerOpen = false
+        lastInteractionAt = SystemClock.elapsedRealtime()
     }
 
     fun openNewEntry() = _state.update { it.copy(screen = Screen.EDITOR, editingEntryId = null) }

@@ -82,6 +82,21 @@ const log = (...a) => console.log('  ok', ...a);
   await assert.rejects(() => p.readBackup(tampered, 'backup password'), (e) => e.code === 'BAD_PASSWORD');
   log('a modified backup is rejected (GCM auth tag)');
 
+  // A backup cannot choose how much memory the key derivation may use, and a
+  // damaged one is reported as damaged rather than as a wrong password.
+  const hostile = JSON.parse(JSON.stringify(envelope));
+  hostile.kdf.N = 2 ** 30;
+  await assert.rejects(() => p.readBackup(hostile, 'backup password'), (e) => e.code === 'CORRUPT');
+
+  const noSalt = JSON.parse(JSON.stringify(envelope));
+  delete noSalt.kdf.salt;
+  await assert.rejects(() => p.readBackup(noSalt, 'backup password'), (e) => e.code === 'CORRUPT');
+
+  const noNonce = JSON.parse(JSON.stringify(envelope));
+  delete noNonce.iv;
+  await assert.rejects(() => p.readBackup(noNonce, 'backup password'), (e) => e.code === 'CORRUPT');
+  log('a backup demanding huge scrypt memory, or missing its salt or nonce, is refused as damaged');
+
   // ------------------------------------------------------------------ merge
 
   const existing = [

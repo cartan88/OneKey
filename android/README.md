@@ -10,7 +10,13 @@ copies it off the device.
 
 - Master-password vault: create, unlock, lock.
 - Add, edit and delete logins; built-in password generator.
-- Copy a password (marked sensitive on Android 13+).
+- Copy a password (marked sensitive on Android 13+); the clipboard is wiped after
+  30 seconds and when the vault locks.
+- Auto-lock: after 5 minutes without a touch or key press, or 1 minute after the
+  app is left (a file picker gets the longer 5 minutes). Locking hides the vault
+  at once and releases the key.
+- Screenshots, screen recording and the recent-apps thumbnail are blocked
+  (`FLAG_SECURE`).
 - Export and import encrypted `.onekey` backups through the system file picker,
   interchangeable with the desktop app.
 
@@ -30,4 +36,4 @@ compatible.
 
 ## Not implemented yet
 
-Biometric unlock, auto-lock on inactivity, and Android Autofill.
+Biometric unlock and Android Autofill.
